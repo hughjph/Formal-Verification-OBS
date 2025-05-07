@@ -21,7 +21,6 @@ from AISP_AccountAccessConsent
 		ConsentId renamed ConsentId;
 definitions 
 types 
--- TODO Define types here
     ClientTokenMap = map OAuth2ClientId to AccessToken;
     PSUAccountMap = map OAuth2ClientId to set of AccountNumber;
     PSU :: 
@@ -43,7 +42,6 @@ end
 
 
 values 
--- TODO Define values here
 functions 
 
     fcnReduceAccounts: set of AccountNumber * nat -> set of AccountNumber
@@ -52,7 +50,6 @@ functions
     post RESULT subset account_numbers;
 
 operations 
--- TODO Define operations here
     fcnCreateIntent: OAuth2ClientId * AccessToken ==> ConsentId
     fcnCreateIntent(cid, access_token) == is not yet specified
     pre 
