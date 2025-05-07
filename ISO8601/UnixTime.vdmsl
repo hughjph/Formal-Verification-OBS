@@ -1,0 +1,24 @@
+module UnixTime
+imports
+from ISO8601
+	types
+		DTG renamed DTG;
+	functions
+		mkDTG renamed mkDTG;
+exports all
+definitions 
+
+values
+	--@doc 00:00:00 UTC on 1 January 1970
+	--		 mkDTG: Year * Month * Day * Hour * Minute * Second -> DTG
+	UNIX_EPOCH: DTG = mkDTG(1970, 1, 1, 0, 0, 0);
+	
+types
+	--@doc Unix time is a DTG from Unix EPOCH lower bound
+	--https://en.wikipedia.org/wiki/Unix_time
+	UnixTime = DTG
+	inv ut == true;
+		
+	UnixTimeStamp = real;
+	
+end UnixTime

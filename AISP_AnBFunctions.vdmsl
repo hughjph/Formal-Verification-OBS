@@ -1,0 +1,13 @@
+/*
+https://openbanking.atlassian.net/wiki/spaces/DZ/pages/1077805296/Account+and+Transaction+API+Specification+-+v3.1.2
+
+Module implementing the transparent functions from the AnB models of AISP 
+see also Abul's MSc Oct 2019
+v.0.1 Leo Freitas, Abdul Almehrej, Paolo Modesti, 2019
+*/
+module AISP_AnBFunctions
+exports all
+definitions
+
+
+end AISP_AnBFunctions

@@ -1,0 +1,346 @@
+/*
+https://openbanking.atlassian.net/wiki/spaces/DZ/pages/1077805296/Account+and+Transaction+API+Specification+-+v3.1.2
+v.0.1 Leo Freitas, 2019
+*/
+module AISP_GlobalDataModel
+imports 
+from Char
+	values
+		UPPER renamed UPPER;
+		LOWER renamed LOWER;
+		DIGIT renamed DIGIT;
+,
+from Numeric
+	types
+		Numeric1 renamed Numeric1;
+,
+from ISO8601
+	types
+	  DTG renamed ISODateTime;
+	  UTC renamed UTC;
+	functions
+		utcLess renamed utcLess;
+		dtgLeq renamed dtgLeq;
+,
+from Identifiers
+	types
+		URI renamed URI;		
+exports 
+	types
+		struct OBAddressTypeCode;
+		struct OBBalanceType1Code;
+		struct OBCreditDebitCode;
+		struct OBEntryStatus1Code;
+		struct OBExternalAccountSubType1Code;
+		struct OBExternalAccountType1Code;
+		struct OBExternalCardAuthorisationType1Code;
+		struct OBExternalCardSchemeType1Code;
+		struct OBExternalLimitType1Code;
+		struct OBExternalOfferType1Code; 
+	  struct OBExternalPartyType1Code;
+	  struct OBExternalScheduleType1Code;
+	 	struct OBExternalStandingOrderStatus1Code;
+	  struct OBExternalStatementType1Code;
+		struct String0;
+		struct String;
+		struct AlphaNumeric;
+		struct UAlpha;
+		struct DAlpha;
+		struct LAlpha;
+		struct Base64;
+		struct Min3Max4Text;	
+		struct Min1Max4Text; 
+		struct Min1Max16Text;
+		struct Min1Max32Text;
+		struct Min1Max34Text; 
+		struct Min1Max35Text;
+		struct Min1Max36Text;
+		struct Min1Max40Text;
+		struct Min1Max70Text;
+		struct Min1Max128Text;
+		struct Min1Max140Text;
+		struct Min1Max210Text;
+		struct Min1Max256Text;
+		struct Min1Max350Text;
+		struct Min1Max500Text;
+		struct AccountId;		
+		struct int32;
+		struct RequestType;
+		struct CountryCode;
+		struct CurrencyCode;
+		struct ExternalBankTransactionFamily1Code;
+		struct ExternalBankTransactionSubFamily1Code;	
+		struct Links; 
+		struct MetaData;
+		struct CreditDebitIndicator;
+		struct OBActiveOrHistoricCurrencyAndAmount;
+		struct OBActiveCurrencyAndAmount_SimpleType;
+	functions
+		xor: bool * bool -> bool;
+		filter_info[@T]: [AccountId] * seq of @T * (AccountId * @T -> bool) -> seq of @T;
+		lesseqDT: [ISODateTime] * [ISODateTime] -> bool
+		lesseqT: [UTC] * [UTC] -> bool
+	values
+		ALPHA_NUMERIC: set1 of char;	
+definitions 
+
+types
+	--@doc(Identifies the nature of the postal address.)
+	OBAddressTypeCode = 
+		<Business> | <Correspondence> | <DeliveryTo> | <MailTo> | <POBox> | 
+		<Postal> | <Residential> | <Statement>; 
+		
+	--@doc(Balance type, in a coded form)
+	OBBalanceType1Code =
+		<ClosingAvailable> | <ClosingBooked> | <ClosingCleared> | <Expected> | 
+		<ForwardAvailable> | <Information> | <InterimAvailable> | <InterimBooked> | 
+		<InterimCleared> | <OpeningAvailable> | <OpeningBooked> | <OpeningCleared> | 
+		<PreviouslyClosedBooked>;
+	
+	OBCreditDebitCode = 
+		<Debit> | <Credit>;
+		
+	OBEntryStatus1Code =	
+		<Booked> | <Pending>;
+	
+	--@doc(Specifies the sub type of account (product family group))
+	OBExternalAccountSubType1Code =
+    <ChargeCard> | <CreditCard> | <CurrentAccount> | <EMoney> | <Loan> | 
+    <Mortgage> | <PrePaidCard> | <Savings>;
+
+	--@doc(Specifies the type of account (personal or business))
+	OBExternalAccountType1Code = 
+		<Business> | <Personal>;
+	
+	--@doc(The card authorisation type.)
+	OBExternalCardAuthorisationType1Code =
+    <ConsumerDevice> | <Contactless> | <None> | <PIN>;
+
+	--@doc(Name of the card scheme)
+	--@qst This is rather limiting. Why not EMV? 
+	OBExternalCardSchemeType1Code =
+		<AmericanExpress> | <Diners> | <Discover> | <MasterCard> | <VISA>;		
+
+  --@doc(Limit type, in a coded form)
+  --@qst reeated enum values
+	OBExternalLimitType1Code =
+    <Available> | <Credit> | <Emergency> | <Pre_Agreed> | <Temporary>;
+
+	--@doc(Offer type, in a coded form)
+	OBExternalOfferType1Code =
+    <BalanceTransfer> | <LimitIncrease> | <MoneyTransfer> | <Other> | <PromotionalRate>;
+    	
+	--@doc(Party type, in a coded form)
+   OBExternalPartyType1Code =
+    <Delegate> | <Joint> | <Sole>;
+
+  --@doc(Specifies the scheduled payment date type requested)
+  OBExternalScheduleType1Code =
+  	<Arrival> | <Execution>;
+	
+	--@doc(Specifies the status of the standing order in code form)
+ 	OBExternalStandingOrderStatus1Code =
+		<Active> | <Inactive>;
+
+  --@doc(Statement type, in a coded form)
+  OBExternalStatementType1Code =
+    <AccountClosure> | <AccountOpening> | <Annual> | <Interim> | <RegularPeriodic>;
+
+--@doc ISO types
+
+	String0 = seq of char;
+	String  = seq1 of char;
+	
+	--@doc XML pattern [A-Z]
+	UAlpha = String
+	inv ua == elems ua subset UPPER;
+	
+	LAlpha = String	
+	inv la == elems la subset LOWER;
+	
+	DAlpha = String
+	inv da == elems da subset DIGIT;
+	
+	AlphaNumeric = String
+	inv an == elems an subset ALPHA_NUMERIC;	
+	
+	--@doc Base64 encoded GUID - ^[0-9a-zA-Z]{1,18}$
+	Base64 = AlphaNumeric
+	inv b64 == len b64 <= 18;
+
+	--@doc Min3Max4Text, based  on https://www.iso.org/standard/33365.html; assuming just string of size
+	Min3Max4Text = String
+	inv m3m4 == len m3m4 in set {3,4};
+	
+	--@todo this is silly; perhaps have an upper bound, and redefine with lowerbound invariants in situ? see AISP_AnBFunctions
+	Min1Max4Text = String
+	inv m1m4 == len m1m4 <= 4;
+	
+	Min1Max16Text = String
+	inv m1m16 == len m1m16 <= 16;
+	
+	Min1Max32Text = String
+	inv m1m32 == len m1m32 <= 32;
+
+	Min1Max34Text = String
+	inv m1m34 == len m1m34 <= 34;
+
+	Min1Max35Text = String
+	inv m1m35 == len m1m35 <= 35;
+
+	Min1Max36Text = String
+	inv m1m36 == len m1m36 <= 36;
+
+	Min1Max40Text = String
+	inv m1m40 == len m1m40 <= 40;
+	
+	Min1Max70Text = String
+	inv m1m70 == len m1m70 <= 70;
+
+	Min1Max128Text = String
+	inv m1m128 == len m1m128 <= 128;
+	
+	Min1Max140Text = String
+	inv m1m140 == len m1m140 <= 140;
+	
+	Min1Max210Text = String
+	inv m1m210 == len m1m210 <= 210;
+
+	Min1Max256Text = String
+	inv m1m256 == len m1m256 <= 256;
+	
+	Min1Max350Text = String
+	inv m1m350 == len m1m350 <= 350;
+	
+	Min1Max500Text = String
+	inv m1m500 == len m1m500 <= 500;
+
+	AccountId = Min1Max40Text;
+
+	int32 = int
+	inv i32 == -(2**31) <= i32 and i32 <= (2**31-1); 
+	
+	RequestType = <POST> | <GET> | <PUT> | <DELETE>; 
+		
+	--@doc XML pattern ^[A-Z]{3,3}$
+	--@bug? ISO4217 requires a string of 3 digits not alpha chars?
+	CurrencyCode = UAlpha
+	inv ct == len ct = MAX_CURRENCY_CODE_LEN;
+
+	--@doc XML pattern ^[A-Z]{2,2}$
+	CountryCode = UAlpha
+	inv cct == len cct = MAX_COUNTRY_CODE_LEN;
+	
+	--@doc codes in https://www.iso20022.org/external_code_list.page 
+	--		 codes for this seems to appear under the 2017 spreadsheet rather than 2019 one 
+	--		 used spreadsheet tool to remove duplicates and create enum type for it
+	ExternalBankTransactionFamily1Code = 
+		<ACCB> | <ACOP> | <ADOP> | <BLOC> | <CAPL> | <CASH> | <CCRD> | <CLNC> | 
+		<CNTR> | <COLC> | <COLL> | <CORP> | <CSLN> | <CUST> | <DCCT> | <DLVR> | 
+		<DOCC> | <DRFT> | <FTDP> | <FTLN> | <FTUR> | <FWRD> | <GUAR> | <ICCN> | 
+		<ICDT> | <ICHQ> | <IDDT> | <IRCT> | <LACK> | <LBOX> | <LFUT> | <LOCT> | 
+		<LOPT> | <MCOP> | <MCRD> | <MDOP> | <MGLN> | <NDFX> | <NSET> | <NTAV> | 
+		<NTDP> | <NTLN> | <OBND> | <OCRD> | <OEQT> | <OIRT> | <OPCL> | <OPTN> | 
+		<OSED> | <OSWP> | <OTHB> | <OTHR> | <RCCN> | <RCDT> | <RCHQ> | <RDDT> | 
+		<RRCT> | <SETT> | <SPOT> | <SWAP> | <SYDN>;
+
+	ExternalBankTransactionSubFamily1Code =		
+		<ACON> | <BACT> | <COAT> | <ICCT> | <LBDB> | <POSP> | <SMCD> | <SMRT> | 
+		<XBDD> | <ACCC> | <ACCO> | <ACCT> | <ACDT> | <ACOR> | <ADBT> | <ADJT> | 
+		<APAC> | <ARET> | <AREV> | <ARPD> | <ASET> | <ATXN> | <AUTT> | <BBDD> | 
+		<BCDP> | <BCHQ> | <BCKV> | <BCWD> | <BIDS> | <BKFE> | <BONU> | <BOOK> | 
+		<BPUT> | <BROK> | <BSBC> | <BSBO> | <CAJT> | <CAPG> | <CASH> | <CCCH> | 
+		<CCHQ> | <CDIS> | <CDPT> | <CHAR> | <CHKD> | <CHRG> | <CLAI> | <CLCQ> | 
+		<CMBO> | <CMCO> | <COME> | <COMI> | <COMM> | <COMT> | <CONV> | <CPRB> | 
+		<CQRV> | <CRCQ> | <CROS> | <CSHA> | <CSLI> | <CWDL> | <DAJT> | <DDFT> | 
+		<DDWN> | <DECR> | <DMCG> | <DMCT> | <DPST> | <DRAW> | <DRIP> | <DSBR> | 
+		<DTCH> | <DVCA> | <DVOP> | <EQBO> | <EQCO> | <ERTA> | <ERWA> | <ERWI> | 
+		<ESCT> | <ESDD> | <EXOF> | <EXRI> | <EXWA> | <FCDP> | <FCTA> | <FCWD> | 
+		<FEES> | <FICT> | <FIDD> | <FIOA> | <FLTA> | <FRZF> | <FUCO> | <FUTU> | 
+		<FWBC> | <FWCC> | <GEN1> | <GEN2> | <IADD> | <INFD> | <INSP> | <INTR> | 
+		<ISSU> | <LBCA> | <LBDP> | <LIQU> | <MARG> | <MCAL> | <MGCC> | <MIXD> | 
+		<MNFE> | <MRGR> | <MSCD> | <NETT> | <NPCC> | <NSYN> | <NTAV> | <ODFT> | 
+		<ODLT> | <OODD> | <OPBC> | <OPCC> | <OPCQ> | <ORCQ> | <OTCC> | <OTCG> | 
+		<OTCN> | <OTHR> | <OVCH> | <OWNE> | <OWNI> | <PADD> | <PAIR> | <PCAL> | 
+		<PLAC> | <PMDD> | <PORT> | <POSC> | <POSD> | <PPAY> | <PRCT> | <PRDD> | 
+		<PRED> | <PRII> | <PRIN> | <PRIO> | <PRUD> | <PSTE> | <RCDD> | <REAA> | 
+		<REDM> | <REPU> | <RESI> | <RHTS> | <RIMB> | <RNEW> | <RPCR> | <RPMT> | 
+		<RRTN> | <RVPO> | <RWPL> | <SABG> | <SALA> | <SDVA> | <SECB> | <SECL> | 
+		<SHPR> | <SLBC> | <SLCC> | <SOSE> | <SOSI> | <SSPL> | <STAC> | <STAM> | 
+		<STDO> | <STLM> | <STLR> | <SUAA> | <SUBS> | <SWAP> | <SWBC> | <SWCC> | 
+		<SWEP> | <SWFP> | <SWIC> | <SWPP> | <SWRS> | <SWUF> | <SYND> | <TAXE> | 
+		<TBAC> | <TCDP> | <TCWD> | <TEND> | <TOPG> | <TOUT> | <TRAD> | <TREC> | 
+		<TRFE> | <TRIN> | <TRPO> | <TRVO> | <TTLS> | <TURN> | <UDFT> | <UNCO> | 
+		<UPCQ> | <UPCT> | <UPDD> | <URCQ> | <URDD> | <VALD> | <VCOM> | <WITH> | 
+		<XBCP> | <XBCQ> | <XBCT> | <XBCW> | <XBRD> | <XBSA> | <XBST> | <XCHC> | 
+		<XCHG> | <XCHN> | <XICT> | <XPCQ> | <XRCQ> | <YTDA> | <ZABA>;		 
+
+	Links ::
+		self: URI
+		first: [URI]
+		prev: [URI]
+		next: [URI]
+		last: [URI];
+		
+	MetaData ::
+		totalPages: int32
+		firstAvailableDateTime: ISODateTime
+		lastAvailableDateTime: ISODateTime
+	inv mk_MetaData(-, fDT, lDT) == dtgLeq(fDT, lDT);
+
+	CreditDebitIndicator = <Credit> | <Debit>; 
+
+	OBActiveOrHistoricCurrencyAndAmount ::
+		amount: OBActiveCurrencyAndAmount_SimpleType
+		currency: CurrencyCode;	
+	
+	--@doc "^\\d{1,13}\\.\\d{1,5}$"
+	OBActiveCurrencyAndAmount_SimpleType ::
+		main: Numeric1
+		fraction: Numeric1
+	inv mk_OBActiveCurrencyAndAmount_SimpleType(m,f) == 
+		len m <= 13 and len f <= 5;
+	
+functions
+	--@doc filter given accounts according to given account id and whether accounts knowledge exist 
+	filter_info[@T]: [AccountId] * seq of @T * (AccountId * @T -> bool) -> seq of @T
+	filter_info(acctid, info, filter) ==
+		if acctid <> nil then
+			[ info(i) | i in set inds info & filter(acctid, info(i)) ]
+		else
+			info
+	post
+		--@doc if accounts exist, result is within known accounts exactly, unless acctid is not nil 
+		(len RESULT <= len info)
+		and
+		(acctid = nil => len RESULT = len info) 
+		and
+		--@doc if a specific account id is requested, result can be at most singleton
+		(acctid <> nil => len RESULT <= 1)
+		;
+	
+	xor: bool * bool -> bool
+	xor(x,y) == (x or y) and not (x and y);
+
+	lesseqDT: [ISODateTime] * [ISODateTime] -> bool
+	lesseqDT(x,y) ==
+		-- if either is nil, assume they are in range (i.e. as soon as possible x as late as ossible)
+		(x = nil or y = nil)
+		or
+		-- if neither is nil, just calculate as per DTG rules
+		(x <> nil and y <> nil and dtgLeq(x, y));
+
+	lesseqT: [UTC] * [UTC] -> bool
+	lesseqT(x,y) ==
+		-- if either is nil, assume they are in range (i.e. as soon as possible x as late as ossible)
+		(x = nil or y = nil)
+		or
+		-- if neither is nil, just calculate as per DTG rules
+		(x <> nil and y <> nil and (utcLess(x, y) or x = y));
+
+values
+	MAX_CURRENCY_CODE_LEN: nat1 = 3;
+	MAX_COUNTRY_CODE_LEN : nat1 = 2;
+	ALPHA_NUMERIC				 : set1 of char = UPPER union LOWER union DIGIT;
+
+end AISP_GlobalDataModel

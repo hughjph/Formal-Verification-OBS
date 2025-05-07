@@ -1,0 +1,156 @@
+/*
+https://raw.githubusercontent.com/OpenBankingUK/read-write-api-specs/v3.1-RC1/dist/client-registration-swagger.json
+v.0.1 Leo Freitas, 2019
+*/
+module AISP_DynamicClientRegistration
+imports
+from Identifiers
+	types
+		UUIDv4 renamed UUIDv4;
+		URI renamed URI;
+,
+from ISO8601
+	types
+		UTC renamed UTC;
+,
+from UnixTime
+	types
+		UnixTimeStamp renamed UnixTimeStamp;
+,
+from AISP_GlobalDataModel
+	types
+		String renamed String;
+		Base64 renamed Base64;
+		Min1Max32Text renamed Min1Max32Text;
+		Min1Max36Text renamed Min1Max36Text;
+		Min1Max128Text renamed Min1Max128Text;
+		Min1Max500Text renamed Min1Max500Text;
+
+exports
+	types
+		--@doc don't export the inner swagger structure? 
+		--struct OBClientRegistration1;
+		struct OBClientRegistrationRequest1;
+		struct OBClientRegistrationResponse1;
+		struct OBRegistrationProperties1;
+		OAuth2ClientId;
+	  OAuth2ClientSecret;
+	  	JWTString;
+		--@todo any other types here to export? Possibly yes 
+definitions
+ 
+types
+--@bug this type does not exist in the AISP swagger specification for client-registration, despite being described there
+	--https://openbanking.atlassian.net/wiki/spaces/DZ/pages/937066600/Dynamic+Client+Registration+-+v3.1
+	
+	--@qst this creates a direct technology dependency with Jason's JWT? Why do that? Sure, tokens are needed, define the needs
+	--	   then choose/adjust to available technologies. This looks like a hasty/copped out solution, where assumptions are delegated
+	--		 to other systems/technologies. What happens if JWT changes or disapears in a few years?
+	
+	SupportedAlgorithms = <RS256> | <PS256> | <ES256>;
+	
+	RegistrationError ::
+		code: RegistrationErrorCode
+		desc: Min1Max500Text;
+	
+	RegistrationErrorCode = 
+		<invalid_redirect_uri> | <invalid_client_metadata> |
+    <invalid_software_statement> | <unapproved_software_statement>;
+    
+  --@doc this type is very confusing. the HTML spec says one thing, the swagger another.
+  --	   lack of clarity on why request only fields appear as always present for both. 
+  --		 
+  OBClientRegistration1 ::
+  	iss: Base64
+  	iat: UnixTimeStamp
+  	exp: UnixTimeStamp
+  	aud: Base64 
+  	jti: UUIDv4
+  	--@bug what to do with respect to this? Abul? Help?
+  	--request: bool
+  	props: OBRegistrationProperties1
+  inv mk_OBClientRegistration1(-,iat,exp,-,-,-) == 
+  	--@qst it doesn't make sense to have these equal (i.e. useless registration).
+  	--		 in fact, there should at least be a smallest window distance between them?
+  	--
+  	--@qst this minimal window of opportunity is important to ensure that this external library time-line gives
+  	--		 enought time/chance for the AccountAccessConsent time windows to be valid/exist. 
+  	iat + MINIMAL_REGISTRAITON_WINDOW < exp;
+  
+  OBClientRegistrationRequest1 = OBClientRegistration1
+  inv mk_OBClientRegistration1(-,-,-,-,-,props) ==
+  	props.request;
+
+  OBClientRegistrationResponse1 = OBClientRegistration1
+  inv mk_OBClientRegistration1(-,-,-,-,-,props) ==
+  	not props.request;
+  	
+  --@todo RFC7591, RFC7592
+  --https://tools.ietf.org/html/rfc7591
+  --https://tools.ietf.org/html/rfc7592
+  --https://openid.net/specs/openid-connect-registration-1_0.html
+  OAuth2String = Min1Max36Text;
+  OAuth2ClientId = OAuth2String;
+  OAuth2ClientSecret = OAuth2String;
+  
+  --@qst many of these types are defined in line, yet others used once-only as these arten't? SupportedAlgorithms
+  TokenEndpointAuthMethod = <private_key_jwt> | <tls_client_auth>;
+  
+  GrantTypes = <client_credentials> | <authorization_code> | <refresh_token>;
+  
+  ResponseTypes = <code> | <code_id_token>;
+  
+  ApplicationType = <web> | <mobile>;
+  
+  --@todo RFC7519
+  --https://tools.ietf.org/html/rfc7519
+  JWTString = String;
+  
+  OBRegistrationProperties1 ::
+  	request: bool
+	client_id: [OAuth2ClientId]
+	client_secret: OAuth2ClientSecret
+	--@bug swagger different from html
+	client_id_issued_at: [UTC]
+	client_secret_expires_at: [UTC]
+	redirect_uris: seq1 of URI
+	token_endpoint_auth_method: TokenEndpointAuthMethod
+	grant_types: seq1 of GrantTypes
+	response_types: seq of ResponseTypes
+	--@bug swagger says string, html says UUID
+	software_id: Base64
+	scope: seq of Min1Max32Text
+	software_statement: JWTString
+	application_type: ApplicationType
+	id_token_signed_response_alg: SupportedAlgorithms
+	request_object_signing_alg: SupportedAlgorithms
+	token_endpoint_auth_signing_alg: SupportedAlgorithms
+	tls_client_auth_dn: Min1Max128Text
+
+ 	inv mk_OBRegistrationProperties1(request, client_id,
+ 		client_secret, client_id_issued_at, client_secret_expires_at,
+ 		redirect_uris,token_endpoint_auth_method, grant_types, response_types, 
+ 		software_id, scope, software_statement, application_type, id_token_signed_response_alg,
+ 		request_object_signing_alg, token_endpoint_auth_signing_alg, tls_client_auth_dn) == 
+ 		--@doc responses must have cliend_id
+ 		(not request => client_id <> nil)
+ 		--and
+ 		--client_id_issued_at, client_secret_expires_at
+ 		;
+
+values
+	--@qst what should this be? reminds me of rrp! 
+	MINIMAL_REGISTRAITON_WINDOW: UnixTimeStamp = 10; 	
+
+--@doc whatever the AnB functions needs, these have to be as defined by the API
+operations 
+	dynamicClientRegistration_register_POST: () ==> ()
+	dynamicClientRegistration_register_POST() == is not yet specified;
+	dynamicClientRegistration_register_GET: () ==> ()
+	dynamicClientRegistration_register_GET() == is not yet specified;
+	dynamicClientRegistration_register_PUT: () ==> ()
+	dynamicClientRegistration_register_PUT() == is not yet specified;
+	dynamicClientRegistration_register_DELETE: () ==> ()
+  dynamicClientRegistration_register_DELETE() == is not yet specified;
+  
+end AISP_DynamicClientRegistration

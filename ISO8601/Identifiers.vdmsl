@@ -1,0 +1,223 @@
+module Identifiers
+exports 
+	types
+		struct String;
+		struct URI;
+		struct URL;
+		struct Hex;
+		struct Hex4;
+		struct Hex8;
+		struct Hex12;
+		struct uint16;
+		struct uint32;
+		struct uint48;
+		struct UUID;
+		struct UUIDn;
+		struct UUIDv4;
+	functions
+		mkUUID : Hex8 * Hex4 * Hex4 * Hex4 * Hex12 -> UUID;
+		mkUUIDn: uint32 * uint16 * uint16 * uint16 * uint48 -> UUIDn;
+		--@todo transform UUIDn to UUID and vice versa? copy the hex2str str2hex from support model 
+		str2UUID: String -> UUID;
+		
+definitions 
+
+types
+	uint16 = nat
+	inv u16 == u16 <= (2**16);
+
+	uint32 = nat
+	inv u32 == u32 <= (2**32);
+
+	uint48 = nat
+	inv u48 == u48 <= (2**48);
+
+	String = seq1 of char;
+	
+	--@todo
+	URI = String;
+	
+	--@todo
+	URL = URI;
+	
+	--@doc padded hex for 0000 or 000F
+	Hex = String
+	inv hex == elems hex subset HEX;
+	
+	Hex1 = Hex
+	inv h1 == len h1 = 1;
+	
+	Hex3 = Hex
+	inv h3 == len h3 = 3;
+	
+	Hex4 = Hex
+	inv h4 == len h4 = 4;
+
+	Hex8 = Hex
+	inv h8 == len h8 = 8;
+	
+	Hex12 = Hex
+	inv h12 == len h12 = 12;
+		
+	--https://en.wikipedia.org/wiki/Universally_unique_identifier
+	--@todo, this is more complicated; leave for later.
+	UUIDn :: 
+		time_low: uint32 
+		time_mid: uint16
+		time_hi_and_version: uint16
+		clock_seq_hi_and_res_clock_seq_low: uint16
+		node: uint48;
+		
+	UUIDnv4 = UUIDn
+	inv mk_UUIDn(-, -, -, -, -) == true;
+		
+	UUIDr :: 
+		time_low: Hex8
+		time_mid: Hex4
+		time_hi_and_version: Hex4
+		clock_seq_hi_and_res_clock_seq_low: Hex4
+		node: Hex12
+	inv mk_UUIDr(-, -, -, clock, -) ==
+		--@doc variant must be 10XX
+		clock(1,...,2) = "10";
+		
+	UUID0v4 = UUIDr
+	inv mk_UUIDr(-, -, thi_v, -, -) ==
+		--@doc first bit is the version, hence first index = 4
+		thi_v(1) = '4'; 
+	
+	--@doc ex. 123e4567-e89b-12d3-a456-426655440000
+	UUID0 = String
+	inv uuid ==
+		--@doc UUID are a hex string of 36 with - spaces in its parts
+		len uuid = UUID_LEN
+		and
+		elems uuid subset HEX union {UUID_SEP}
+		and
+		--@doc there are 4 uuid separators
+		--len [ uuid(i) | i in set inds uuid & uuid(i) = UUID_SEP ] = 4;
+		howManyOfCharIn(UUID_SEP, uuid) = 4; 
+	
+	UUID = String
+	inv uuid == 
+		--@doc each part can only be a hex
+		/*
+		dunion 
+		{ elems uuid(1,...,8)  , 
+		  elems uuid(10,...,13),
+		  elems uuid(15,...,18),
+		  elems uuid(20,...,23),
+		  elems uuid(25,...,len uuid) 
+		} */
+		dunion
+		{ elems time_low(uuid), 
+			elems time_mid(uuid),
+			elems version(uuid),
+			elems time_hi(uuid),
+			elems variant(uuid),
+			elems clock_seq(uuid),
+			elems node(uuid)
+		}
+			subset HEX
+		and
+		--@doc spacers are at specific places
+		(forall i in set UUID_SEP_INDEXES & uuid(i) = UUID_SEP)
+		; 
+		
+	--@doc v4 UUID, `^[0-9A-F]{8}-[0-9A-F]{4}-4[0-9A-F]{3}-[89AB][0-9A-F]{3}-[0-9A-F]{12}$` (html)
+ 	--@doc ^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$ (json) 
+ 	UUIDv4 = UUID
+	inv uuidv4 ==
+		version(uuidv4) = "4"
+		and
+		--@doc N in the pattern has to be 10xx, or
+		--		 1000=0x8, 1001=0x9, 1010=0xA, 1011=0xB
+		elems variant(uuidv4) subset UUID_VARIANT_BITS;	
+	
+functions
+	mkUUIDr : Hex8 * Hex4 * Hex4 * Hex4 * Hex12 -> UUIDr
+	mkUUIDr(tlow, tmid, thi, clock, node) == mk_UUIDr(tlow, tmid, thi, clock, node);
+
+	mkUUID : Hex8 * Hex4 * Hex4 * Hex4 * Hex12 -> UUID
+	mkUUID(tlow, tmid, thi, clock, n) == 
+		tlow ^ "-" ^ tmid ^ "-" ^ thi ^ "-" ^ clock ^ "-" ^ n;
+	
+	str2UUID: String -> UUID
+	str2UUID(s) == s
+	pre
+		inv_UUID(s);
+	 
+	mkUUIDn: uint32 * uint16 * uint16 * uint16 * uint48 -> UUIDn
+	mkUUIDn(tlow, tmid, thi, clock, n) == mk_UUIDn(tlow, tmid, thi, clock, n);	
+		
+	time_low: UUID0 -> Hex8
+	time_low(uuid) == uuid(1,...,8);	
+	
+	time_mid: UUID0 -> Hex4
+	time_mid(uuid) == uuid(10,...,13);
+	
+	version: UUID0 -> Hex1
+	version(uuid) ==  uuid(15,...,15);
+
+	time_hi: UUID0 -> Hex3
+	time_hi(uuid) == uuid(16,...,18);
+	
+	--@doc 1 to 3-bit "variant" in the most significant bits, followed by the 13 to 15-bit clock sequence
+	--		 that means there is sharing? No. From the RFC it seems it's 10XX, so it's 12 bit left not 13-15?
+	variant: UUID0 -> Hex1
+	variant(uuid) == uuid(20,...,20);
+	
+	clock_seq: UUID0 -> Hex3
+	clock_seq(uuid) == uuid(21,...,23);
+		
+	node: UUID0 -> Hex12
+	node(uuid) == uuid(25,...,len uuid);
+
+--@doc = transform a sequence into a bag (i.e. a map counting the number of instances sequence elements appear)
+	--			 we use Z/Eves encoding of bags with partial functions as this fits well with VDM, rather than the total
+	--		   map as in @T to nat where result is 0 for when @T is not in the sequence.
+	seq2bag[@T]: seq of @T -> (map @T to nat1)
+	seq2bag(ss) == 
+		--@todo/codegen/mods0 CG-Error: ASeqPattern/AConcatentaitonPattern
+		if ss = [] then
+			{|->}
+		else
+			let x: @T 			 = hd ss,
+			  mp': map @T to nat1 = seq2bag[@T](tl ss)
+			in
+										 if x in set dom mp' then 
+										 		mp' ++ { x |-> mp'(x)+1 } 
+										 else 
+										 		mp' munion { x |-> 1 } 
+		--cases ss:
+		--	[] 			-> {|->},
+		--	[x]^xs	-> let mp': map @T to nat1 = seq2bag[@T](xs)
+		--							in
+		--								 if x in set dom mp' then 
+		--								 		mp' ++ { x |-> mp'(x)+1 } 
+		--								 else 
+		--								 		mp' munion { x |-> 1 } 
+		--end
+	measure
+		len ss;
+
+--@doc = counts how many times (if any) the given element appears in the given sequence
+	howManyOfIn[@T]: @T * seq of @T -> nat
+	howManyOfIn(ch, s) == 
+		let bag: (map @T to nat1) = seq2bag[@T](s) in
+			if ch in set dom bag then bag(ch) else 0;
+
+	--@doc = counts how many times (if any) the given char appears in the given string
+	howManyOfCharIn: char * seq of char -> nat
+	howManyOfCharIn(ch, s) == howManyOfIn[char](ch,s);
+		
+values
+	--@doc fixed aspects  of UUIDs: len is 36, separator is '-' appearing 4 times
+	UUID_LEN: nat1 = 36;
+	UUID_SEP: char = '-';
+	UUID_SEP_INDEXES: set1 of nat1 = {9,14,19,24};
+	--@doc Swagger allows for 'a'; 
+	UUID_VARIANT_BITS: set1 of char = {'8','9','A','B','a','b'};
+	HEX: set1 of char = {'0','1','2','3','4','5','6','7','8','9','A','B','C','D','E','F','a', 'b', 'c', 'd', 'e', 'f' };
+  	
+end Identifiers

@@ -1,0 +1,53 @@
+module AISPLib
+exports all
+definitions 
+
+types
+	Secret = seq1 of char; 
+	
+functions
+	
+/*
+	# ---- ASPSP Authentication Functionality ---- #
+	# Params: the agent whose secret to obtain -- Output: the secret
+	# Note: Treat agent names as their identifiers
+#	Function [Agent, Agent -> Number] fcnAgreedOnSecret;			# CHANGED 14/07 as functionality for agreeing on secret likely differs for AISP and PSU
+	Function [Agent -> Number] fcnAISPSecret;
+	Function [Agent -> Number] fcnPSUSecret;
+	# Authenticate the AISP 
+	# Params: AISP credentials -- Output: authentication result
+#	Function [Agent, Number -> Number] fcnAISPAuthentication;
+	# Generate a base level token for accessing intent creation API
+	# Params: AISP ID -- Output: Client Token
+	Function [Agent -> Number] fcnClientCredToken;	
+	# Authenticate the PSU
+	# Params: PSU credentials -- Output: authentication result
+#	Function [Agent, Number -> Number] fcnPSUAuthentication;
+	# Generate authorisation code exchangeable for an access token (links AuthCode to AISP)
+	# Params: Consent ID -- Output: Authorisation Code
+	Function [Number -> Number] fcnAuthCode;	
+	# Create an access token for account data access
+	# Params: Authorisation Code -- Output: Authorisation Code Token
+	Function [Number -> Number] fcnAuthCodeToken;					# This will also verify the auth. code and ensure it belongs to the AISP (rfc6749 requirement)
+*/
+
+	--fcnAgreedOnSecret: Agent * Agent -> 
+	
+	--@doc secrets are shared between parties. AISP has a fixed secret, authAISP has every AISP's secret 
+	/*fcnAISPSecret: Client -> Secret 
+	fcnAISPSecret(aisp) == 
+				"AISPSecret";
+
+	fcnAISPSecret: Server -> Secret 
+	fcnAISPSecret(aisp) == 
+		secrets(aisp)
+	pre
+		aisp in set dom secrets;
+	*/
+	--fcnPSUSecret: Agent -> Secret
+	
+	--@doc Token = set of capabilities the server knows about the client that it is happy to engage with?  
+	--fcnClientCredToken: Client -> Token
+	
+
+end AISPLib

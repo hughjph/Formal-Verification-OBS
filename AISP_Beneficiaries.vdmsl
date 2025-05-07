@@ -1,0 +1,124 @@
+/*
+https://openbanking.atlassian.net/wiki/spaces/DZ/pages/1077805403/Beneficiaries+v3.1.2
+v.0.1 Leo Freitas, 2019
+*/
+module AISP_Beneficiaries
+imports
+from AISP_GlobalDataModel
+	types
+		Links renamed Links;
+		MetaData renamed MetaData;
+		AccountId renamed AccountId;
+		Min1Max35Text renamed Min1Max35Text;
+		Min1Max40Text renamed Min1Max40Text;
+	functions
+			filter_info renamed filter_info;
+,
+from AISP_AccountAccessConsent
+	types
+		OBPermission_NCL renamed OBPermission_NCL;
+		OBExternalPermission1Code_NCL renamed OBExternalPermission1Code_NCL;
+		OBExternalPermissions1Code_NCL renamed OBExternalPermissions1Code_NCL;
+	functions
+		permissions_for renamed permissions_for;
+,
+from AISP_Transactions
+	types
+		OBBranchAndFinancialInstitutionIdentification6 renamed OBBranchAndFinancialInstitutionIdentification6;
+,		
+from AISP_Accounts
+	types 
+		OBCashAccount5 renamed OBCashAccount5;
+exports 
+	types
+		struct OBReadBeneficiary3;
+		struct OBBeneficiary3;
+		struct OBBeneficiary3Basic;
+		struct Beneficiaries_GET_Permissions;
+		struct Beneficiaries_GET_Response;
+	operations
+		beneficiaries_GET: [AccountId] * Beneficiaries_GET_Permissions ==> Beneficiaries_GET_Response;
+definitions 
+
+types
+	OBReadBeneficiary3 :: 
+		data: seq of OBBeneficiary3
+		links: Links
+		meta: MetaData;
+		
+	OBBeneficiary3 :: 
+		basic: OBBeneficiary3Basic
+		creditorAgent: [OBBranchAndFinancialInstitutionIdentification6]
+		creditorAccount: [OBCashAccount5];
+		
+	OBBeneficiary3Basic ::
+		accountId: [AccountId]
+		beneficiaryId: [Min1Max40Text]
+		reference: [Min1Max35Text];
+
+	Beneficiaries_GET_Permission = OBExternalPermission1Code_NCL
+	inv mk_OBExternalPermission1Code_NCL(endpoint, -) ==
+		endpoint = <Beneficiaries>;
+	
+	Beneficiaries_GET_Permissions = OBExternalPermissions1Code_NCL
+	inv perms == forall i in set perms & is_Beneficiaries_GET_Permission(i);
+
+	Beneficiaries_GET_Response = (seq of OBBeneficiary3Basic | seq of OBBeneficiary3);
+	
+state Beneficiaries of
+	beneficiaries: [OBReadBeneficiary3]
+init b == b = mk_Beneficiaries(nil)
+end
+
+functions
+	filter_acctid: AccountId * OBBeneficiary3 -> bool
+	filter_acctid(a,e) == e.basic.accountId = a;
+
+	--@doc project the basic information from OBBeneficiary3
+	basicBeneficiariesFrom: seq of OBBeneficiary3 -> seq of OBBeneficiary3Basic
+	basicBeneficiariesFrom(benefs) ==
+		[ benefs(i).basic | i in set inds benefs ]
+	post
+		len benefs = len RESULT;
+		
+operations
+
+	pure
+	--@qst the description of permissions here is rather loose; the choice here seems wrong, given they allow for a set. 
+	--@qst who sets these permissions? They do not come in the API call. 
+	--@qst should they be part of the state? Or are they on a per-api basis?
+	--@todo REVIEW EVERYWHERE!  
+	beneficiaries_GET: [AccountId] * Beneficiaries_GET_Permissions ==> Beneficiaries_GET_Response
+	beneficiaries_GET(acctid, perms) == 
+		(let 
+			 permissions  : set1 of OBPermission_NCL = permissions_for(<Beneficiaries>, perms),
+			 filtered_bens: seq of OBBeneficiary3    = filter_info[OBBeneficiary3](acctid, beneficiaries.data, filter_acctid)
+		 in
+			 if <Detail> in set permissions then
+				 return filtered_bens
+			 else
+			 	 return basicBeneficiariesFrom(filtered_bens)
+		)
+	pre
+		beneficiaries <> nil
+		and
+		--@doc if a specific account is asked, then it must be found
+		(acctid <> nil =>	filter_info[OBBeneficiary3](acctid, beneficiaries.data, filter_acctid) <> [])--len filter_info = 1 
+	post
+		--@doc cannot return more than I know about
+		len RESULT <= len beneficiaries.data 
+		and
+		--@qst various "may" might mean, result can be empty (<=1)? or even multiple (>=1)?
+		(acctid <> nil => len RESULT = 1)
+		and
+		--@doc assuming it might be empty, when in bulk, detailed or basic
+		--@todo adjust Transaction_GET or this accordingly to our increased understanding of things 
+		(let 
+			 permissions  : set1 of OBPermission_NCL = permissions_for(<Beneficiaries>, perms)
+		 in
+			(<Detail> in set permissions => is_(RESULT, seq of OBBeneficiary3))
+			and
+			(<Basic> in set permissions => is_(RESULT, seq of OBBeneficiary3Basic))
+		);
+				
+end AISP_Beneficiaries

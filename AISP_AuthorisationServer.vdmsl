@@ -1,0 +1,197 @@
+module AISP_AuthorisationServer
+imports
+from AISP_GlobalDataModel
+	types
+		String renamed String;
+,
+from AISP_AccountAccessConsent
+	types
+		OBReadConsentResponse1 renamed OBReadConsentResponse1;
+		ConsentId renamed ConsentId;
+,		
+from AISP_DynamicClientRegistration
+	types
+	  OAuth2ClientId renamed OAuth2ClientId;
+	  OAuth2ClientSecret renamed OAuth2ClientSecret;
+		OBRegistrationProperties1 renamed OBRegistrationProperties1;
+		OBClientRegistrationResponse1 renamed OBClientRegistrationResponse1;
+		OBClientRegistrationRequest1 renamed OBClientRegistrationRequest1;
+exports 
+	types
+		struct AISPClientRegistrationMap;
+		struct PSUClientRegistrationMap;
+		AccessToken;
+		struct AccessTokenType;
+		struct AccessTokens;
+		--struct AISPClientTokens;
+		struct AISPClientRegistration;
+		--struct ClientTokens;
+		struct PSUClientRegistration;
+		struct AISPTokenClientsMap;
+definitions 
+
+types
+
+	AISPClientRegistration = set of OAuth2ClientId;
+	--@doc the whole response object is available, as a result of a successful OAuth2 Dynamic Client Registration process
+	AISPClientRegistrationMap = map OAuth2ClientId to OBClientRegistrationResponse1
+	inv reg == 
+		(forall cid in set dom reg & 
+			let props: OBRegistrationProperties1 = reg(cid).props in
+				--@doc mapped client ID agrees with response cliend id
+				props.client_id = cid
+				--and
+				--@doc mapped secret is known (i.e. this is for successful cases only)
+				--props.client_secret <> nil
+	  );
+	
+	PSUClientRegistration = set of OAuth2ClientId;
+	PSUClientRegistrationMap = map OAuth2ClientId to OBClientRegistrationResponse1
+	inv reg == 
+		(forall cid in set dom reg & 
+			let props: OBRegistrationProperties1 = reg(cid).props in
+				--@doc mapped client ID agrees with response cliend id
+				props.client_id = cid
+				--and
+				--@doc mapped secret is known (i.e. this is for successful cases only)
+				--props.client_secret <> nil
+	  );
+  AISPConsentMap = map ConsentId to OBReadConsentResponse1
+  inv consent == 
+    forall cid in set dom consent & cid = consent(cid).data.consentId;
+	
+	--@doc views within the Client and Consent maps  
+	AISPClientConsentMap = map ConsentId to OAuth2ClientId;
+	AISPAuthCodeConsentMap = map AuthorisationCode to ConsentId;
+	AISPTokenClientsMap = map AccessToken to OAuth2ClientId;
+	AISPTokensConsentMap = map AccessToken to ConsentId;
+	 
+  --@todo access_token type RFC6749
+  --https://tools.ietf.org/html/rfc6749#section-5.1
+  AccessTokenType :: 
+	  access_token: AccessToken
+	  token_type: String
+	  expires_in: nat -- number of seconds
+	  refresh_token : String
+	  scope: String
+	  --@todo Abdul's claims "valid access token" + "valid token scope" + "matches client SSL certificate" 
+	  --			 from the one requested ought to translate to some invariant of this type
+    ;
+
+	ClientTokens = map AccessToken to OBRegistrationProperties1;
+
+
+  --@doc Access token grants end point access  
+	AccessToken = String;
+
+	AccessTokens = map AccessToken to AccessTokenType
+	inv tks == (forall t in set dom tks & tks(t).access_token = t);
+	
+	--@doc Bank authorisation code for the AISP redirected through the PSU	
+	AuthorisationCode = String; 
+	 
+	AuthorisationCodeType ::
+	  code : AuthorisationCode;
+	 	 
+	AuthorisationCodes = map AuthorisationCode to AuthorisationCodeType
+  inv tks == (forall t in set dom tks & tks(t).code = t);
+    
+	AuthServer ::
+		clients : AISPClientRegistrationMap
+    	client_tokens: AISPTokenClientsMap
+		consents: AISPConsentMap 
+		client_consents: AISPClientConsentMap
+		auth_consents: AISPAuthCodeConsentMap
+		consent_tokens: AISPTokensConsentMap
+	inv mk_AuthServer(clients, client_consents, consents, client_tokens, auth_consents, consent_tokens) ==
+    --@doc client_consent clientId must be about known clients
+    rng client_consents subset dom clients
+    and
+    --@doc client_tokens clientId must be about known clients 
+    rng client_tokens subset dom clients
+    and
+		--@doc client_consent consentId must be about known consents
+		dom client_consents subset dom consents
+		and
+		--@doc authorisation consent Ids must be about known consents 
+		rng auth_consents subset dom consents
+		and
+		rng consent_tokens subset dom consents;
+		--and
+		--@doc access tokens must be unique within server
+		--dom client_tokens inter dom consent_tokens = {};
+ 
+
+
+state AuthorisationServer of
+	AISP_secrets: AISPClientRegistrationMap
+	client_tokens: ClientTokens
+	access_tokens: AccessTokens 
+	PSU_secrets: PSUClientRegistrationMap
+	consents: AISPConsentMap 
+	auth_consents: AISPAuthCodeConsentMap
+	consent_tokens: AISPTokensConsentMap
+inv mk_AuthorisationServer(AISP_secrets, client_tokens, access_tokens, PSU_secrets, consents, auth_consents, consent_tokens) ==
+	dom client_tokens subset dom access_tokens
+end
+
+functions
+	--@doc get the access token for the client, where there are different tokens:
+	--		 client-token used to access consent end point
+	--		 authorisation-token used access PSU current data
+	--
+	--@qst AccessToken pool of some kind via this OAuth2 mechanism? they have similar stricture 
+	--@todo  
+	some_computation_over: OAuth2ClientId -> AccessTokenType
+	some_computation_over(cid) == is not yet specified
+
+operations
+
+	--@doc Retrieves the secret for AISP with a cliend id from a previously generated OBClientRegistrationRequest1 
+	pure
+	fcnAISPSecret: OAuth2ClientId ==> OAuth2ClientSecret
+	fcnAISPSecret(cid) == 
+		(return AISP_secrets(cid).props.client_secret;
+		)
+	pre 
+		cid in set dom AISP_secrets
+	post
+		AISP_secrets(cid).props.client_secret = RESULT;
+		
+	pure
+	fcnClientCredToken: OAuth2ClientId ==> AccessTokenType
+	fcnClientCredToken(cid) == is not yet specified
+	pre
+		cid in set dom AISP_secrets
+		and
+		--@doc AISP exists and has a token that is within a known client
+		some_computation_over(cid).access_token in set dom access_tokens inter dom client_tokens
+	post
+		--@qst perhaps this is what valid means? i.e. the function *must* create the access_token result ant populate the client/access token maps
+		RESULT.access_token in set dom access_tokens inter dom client_tokens
+		and
+		access_tokens(RESULT.access_token) = RESULT
+		and
+		client_tokens(RESULT.access_token).client_id = cid;
+
+	fcnPSUSecret: OAuth2ClientId ==> OAuth2ClientSecret
+	fcnPSUSecret(cid) == 
+		(return PSU_secrets(cid).props.client_secret;
+		)
+	pre 
+		cid in set dom PSU_secrets
+	post
+		PSU_secrets(cid).props.client_secret = RESULT;
+
+	fcnAuthCode: ConsentId ==> AuthorisationCode 
+	fcnAuthCode(consent) == is not yet specified -- generate a UUID which can be used as an authorisation code
+	pre consent in set dom consents
+	post auth_consents(RESULT) = consent;
+
+	fcnAuthCodeToken: AuthorisationCode ==> AccessToken 
+	fcnAuthCodeToken(auth_code) == is not yet specified -- construct access token generation in java model
+	pre auth_code in set dom auth_consents 
+	post consent_tokens(RESULT) = auth_consents(auth_code)
+
+		
+end AISP_AuthorisationServer

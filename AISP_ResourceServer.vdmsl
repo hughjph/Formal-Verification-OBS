@@ -1,0 +1,112 @@
+module AISP_ResourceServer
+exports all
+
+imports 
+from Identifiers
+	types
+		UUIDv4 renamed UUIDv4;
+,
+from AISP_AuthorisationServer
+    types 
+        AccessTokens renamed AccessTokens;
+        AccessToken renamed AccessToken;
+        AISPTokenClientsMap renamed AISPTokenClientsMap;
+,
+from AISP_DynamicClientRegistration
+	types
+	  OAuth2ClientId renamed OAuth2ClientId;
+,
+from AISP_AccountAccessConsent
+	types
+		ConsentId renamed ConsentId;
+definitions 
+types 
+-- TODO Define types here
+    ClientTokenMap = map OAuth2ClientId to AccessToken;
+    PSUAccountMap = map OAuth2ClientId to set of AccountNumber;
+    PSU :: 
+        id : nat;
+    AccountNumber = nat;
+    IntentNo = nat;
+    Intent = nat;
+    ClientTokens = map OAuth2ClientId to AccessToken;
+    ClientIds = set of OAuth2ClientId;
+
+state ResServer of
+    UUIDs: set of UUIDv4
+    psu_accounts: PSUAccountMap
+    client_tokens: ClientTokens
+    access_tokens: AccessTokens
+    client_ids: ClientIds 
+    token_clients: AISPTokenClientsMap
+end 
+
+
+values 
+-- TODO Define values here
+functions 
+
+    fcnReduceAccounts: set of AccountNumber * nat -> set of AccountNumber
+    fcnReduceAccounts(account_numbers, selector) == is not yet specified
+    pre account_numbers <> {}
+    post RESULT subset account_numbers;
+
+operations 
+-- TODO Define operations here
+    fcnCreateIntent: OAuth2ClientId * AccessToken ==> ConsentId
+    fcnCreateIntent(cid, access_token) == is not yet specified
+    pre 
+        cid in set client_ids
+        and 
+        access_token in set dom access_tokens
+    post 
+        client_tokens(cid) = access_token;
+
+    fcnGetIntent: OAuth2ClientId ==> AccessToken
+    fcnGetIntent(cid) == 
+        return client_tokens(cid)
+    pre cid in set dom client_tokens
+    post client_tokens(cid) = RESULT;
+
+    fcnFetchAccounts: OAuth2ClientId ==> set of AccountNumber
+    fcnFetchAccounts(cid) == 
+        return psu_accounts(cid)
+    pre 
+        dom psu_accounts <> {}
+        and
+        cid in set dom psu_accounts
+    post RESULT = psu_accounts(cid);
+
+    fcnAuthoriseIntent: OAuth2ClientId * ConsentId * AccessToken ==> ConsentId
+    fcnAuthoriseIntent(cid, consent_id, access_token) == is not yet specified
+    pre 
+        client_ids <> {}
+        and
+        dom client_tokens <> {}
+        and 
+        dom access_tokens <> {}
+        and
+        cid in set client_ids
+        and
+        cid in set dom client_tokens
+        and 
+        access_token in set dom access_tokens
+    post client_tokens(cid) = access_token;
+
+
+    fcnAccountsEndpoint: AccessToken * UUIDv4 * nat ==> set of AccountNumber
+    fcnAccountsEndpoint(access_token, uuid, number) == 
+    (
+        UUIDs := UUIDs union {uuid};
+        let cid = token_clients(access_token) in
+            return fcnReduceAccounts(fcnFetchAccounts(cid), number)
+    )
+    pre uuid not in set UUIDs
+        and
+        access_token in set dom access_tokens
+        and 
+        access_tokens(access_token).expires_in > 0
+    post RESULT <> {}
+        and 
+        uuid in set UUIDs;
+end AISP_ResourceServer

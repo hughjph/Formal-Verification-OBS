@@ -1,0 +1,139 @@
+/*
+https://openbanking.atlassian.net/wiki/spaces/DZ/pages/1077805362/Accounts+v3.1.2
+v.0.1 Leo Freitas, 2019
+*/
+module AISP_Accounts
+imports
+from AISP_GlobalDataModel
+	types
+		Links renamed Links;
+		MetaData renamed MetaData;
+		CurrencyCode renamed CurrencyCode;
+		AccountId renamed AccountId;
+		Min1Max34Text renamed Min1Max34Text;
+		Min1Max35Text renamed Min1Max35Text;
+		Min1Max40Text renamed Min1Max40Text;
+		Min1Max70Text renamed Min1Max70Text;
+		Min1Max256Text renamed Min1Max256Text;
+		OBExternalAccountType1Code renamed OBExternalAccountType1Code;
+		OBExternalAccountSubType1Code renamed OBExternalAccountSubType1Code;
+	functions
+		filter_info renamed filter_info;  
+,
+from AISP_AccountAccessConsent
+	types
+		OBExternalPermissions1Code renamed OBExternalPermissions1Code
+exports 
+	types
+		struct OBReadAccount3;
+		struct OBAccount3;
+		struct OBCashAccount5;
+		struct OBAccount3Basic;
+		struct Accounts_GET_Response;
+		struct Accounts_GET_Permissions;
+	operations
+		accounts_GET: [AccountId] * Accounts_GET_Permissions ==> Accounts_GET_Response;
+definitions 
+
+types
+	OBReadAccount3 ::
+		accounts: seq of OBAccount3
+		links: Links
+		meta: MetaData;
+	
+	OBAccount3Basic ::
+		accountId: AccountId
+		currency: CurrencyCode
+		accountType: OBExternalAccountType1Code
+		accountSubType: OBExternalAccountSubType1Code
+		description: [Min1Max35Text]
+		nickName: [Min1Max70Text];
+			
+	OBAccount3 ::
+		basic: OBAccount3Basic
+		account: seq of OBCashAccount5
+		servicer: [OBBranchAndFinancialInstitutionIdentification5];
+		
+	OBCashAccount5 ::
+		schemeName: OBExternalAccountIdentification4Code
+		identification: Min1Max256Text
+		name: [Min1Max70Text]
+		secondaryIdentification: [Min1Max34Text];
+		
+	OBBranchAndFinancialInstitutionIdentification5 :: 
+		schemeName: OBExternalFinancialInstitutionIdentification4Code
+		identification: Min1Max35Text;
+	
+	--@doc Name of the identification scheme, in a coded form as published in an external list.
+	--	   ex: UK.OBIE.BICFI
+	--@todo Add more invariants to the name? 
+	OBExternalFinancialInstitutionIdentification4Code = Min1Max40Text;
+	
+  --@doc Name of the identification scheme, in a coded form as published in an external list.
+  --     "UK.OBIE.BBAN", "UK.OBIE.IBAN", "UK.OBIE.PAN", "UK.OBIE.Paym", "UK.OBIE.SortCodeAccountNumber"
+	OBExternalAccountIdentification4Code = Min1Max40Text;
+
+	Accounts_GET_Response = (seq of OBAccount3Basic | seq1 of OBAccount3);
+	
+	Accounts_GET_Permissions = OBExternalPermissions1Code 
+	inv perm == perm in set { <ReadAccountsBasic>, <ReadAccountsDetail> };
+
+--@qst how are these instantiated?  		
+state Accounts of
+	accounts: [OBReadAccount3]
+init acc == acc = mk_Accounts(nil)
+end
+
+functions
+	
+	--@doc project the basic information from OBAccount3
+	basicAccountsFrom: seq of OBAccount3 -> seq of OBAccount3Basic
+	basicAccountsFrom(accs) ==
+		[ accs(i).basic | i in set inds accs ]
+	post
+		len accs = len RESULT;
+		
+	filter_acctid: AccountId * OBAccount3 -> bool
+	filter_acctid(a,e) == e.basic.accountId = a;
+		
+operations
+	
+	pure
+	accounts_GET: [AccountId] * Accounts_GET_Permissions ==> Accounts_GET_Response
+	accounts_GET(acctid, perm) == 
+		(let 
+			 filtered_accs: seq of OBAccount3 = 
+			 		filter_info[OBAccount3](acctid, 
+			 			if accounts = nil then [] else accounts.accounts,
+			 			filter_acctid) 
+		 in
+			 if perm = <ReadAccountsDetail> then
+				 return filtered_accs
+			 else
+			 	 return basicAccountsFrom(filtered_accs)
+		)
+	pre
+		--@doc if the ReadAccountsDetail is granted by the PSU, OBReadAccount3/Data/Account/Account must be returned (1..n)
+		(perm = <ReadAccountsDetail> 
+		 => 
+		 	--@doc if details required, they must exist
+		 	(accounts <> nil and accounts.accounts <> [])
+		 	and
+		 	--@doc if account id is given, it must be found when details are asked
+		 	(acctid <> nil =>	filter_info[OBAccount3](acctid, accounts.accounts, filter_acctid) <> [])
+		)
+		--@doc if ReadAccountsBasic, then if the acctid isn't found it's okay
+		--		 and an empty result is returned?
+		--@qst Why allow for this discrepancy? i.e. why allow for unknown id query? 
+	post
+		--@doc if the ReadAccountsDetail is granted by the PSU, Account must be returned (1..n)
+		--		 and the kind of return will depend on the permission
+		(perm = <ReadAccountsDetail> => is_(RESULT, seq1 of OBAccount3))
+		and
+		(perm = <ReadAccountsBasic> => is_(RESULT, seq of OBAccount3Basic))
+		and
+		len RESULT <= (if accounts = nil then 0 else len accounts.accounts) 
+		and
+		(acctid <> nil => if perm = <ReadAccountsBasic> then len RESULT = 1 else len RESULT <= 1);
+		 
+end AISP_Accounts

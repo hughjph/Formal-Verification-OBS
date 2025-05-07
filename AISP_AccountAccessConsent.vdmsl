@@ -1,0 +1,371 @@
+/*
+https://openbanking.atlassian.net/wiki/spaces/DZ/pages/1077805332/Account+Access+Consents+v3.1.2
+v.0.1 Leo Freitas, 2019
+*/
+module AISP_AccountAccessConsent
+imports
+from ISO8601
+	types
+		DTG renamed ISODateTime
+	functions
+		mkDTG renamed mkDTG;
+		--add renamed addDTG;
+	--values
+		--ONE_SECOND renamed ONE_SECOND;
+		--ONE_HOUR renamed ONE_HOUR;
+		--ONE_DAY renamed ONE_DAY;
+, 
+from AISP_GlobalDataModel
+	types
+		Min1Max128Text renamed Min1Max128Text;
+		RequestType renamed RequestType;
+		Links renamed Links;
+		MetaData renamed MetaData;
+	functions
+		xor renamed xor;
+		lesseqDT renamed lesseqDT; 
+exports 
+	types
+		--@doc no struct export for FSM control 
+		OBExternalRequestStatus1Code;
+		
+		struct OBReadConsent1;
+		struct ConsentId;
+		struct OBReadConsentResponse1;
+		struct OBExternalPermissions1Code;
+
+		--@doc our view on how endpoint permissions ought to be defined 
+		struct OBEndPoint_NCL;
+		struct OBPermission_NCL;  
+		--@todo perhaps don't struct export those?
+	  struct OBExternalPermission1Code_NCL;
+	  struct OBExternalPermissions1Code_NCL;
+	  
+	functions
+		first_accountAccessConsentStatus: () -> OBExternalRequestStatus1Code;
+		last_accountAccessConsentStatus : () -> set1 of OBExternalRequestStatus1Code;
+    fsm_accountAccessConsentStatus  : OBExternalRequestStatus1Code -> set of OBExternalRequestStatus1Code;
+    next_accountAccessConsentStatus : OBExternalRequestStatus1Code -> OBExternalRequestStatus1Code;
+    valid_accountAccessConsentStatus: OBExternalRequestStatus1Code * OBExternalRequestStatus1Code -> bool;
+		
+		authorise_accountAccessConsent: OBExternalRequestStatus1Code -> OBExternalRequestStatus1Code;
+		revoke_accountAccessConsent: OBExternalRequestStatus1Code -> OBExternalRequestStatus1Code;
+		reject_accountAccessConsent: OBExternalRequestStatus1Code -> OBExternalRequestStatus1Code;
+
+		--@todo, tighten this as much as possible, likely without struct export and stronger posts?
+		permissions_for: OBEndPoint_NCL * OBExternalPermissions1Code_NCL -> set1 of OBPermission_NCL
+		
+		--@todo delete
+		invariant_permission_per_endpoint: set of OBExternalPermissions1Code * set1 of OBExternalPermissions1Code -> bool
+
+		f: () -> [OBReadConsentResponse1Data	];
+
+	operations
+		account_access_consent_POST  : OBReadConsent1 ==> OBReadConsentResponse1;
+		account_access_consent_GET   : () ==> OBReadConsentResponse1;
+		account_access_consent_DELETE: () ==> OBReadConsentResponse1;
+	
+	values
+		EXAMLPE_CONSENT : OBReadConsent1; 
+		EXAMPLE_RESPONSE: OBReadConsentResponse1;
+		
+definitions 
+
+types
+	OBExternalRequestStatus1Code = 
+		<Authorised> | <AwaitingAuthorisation> | <Rejected> | <Revoked>;
+		
+	OBReadConsent1 ::
+		data: OBReadData1
+		risk: OBRisk2; 	
+				
+	OBReadData1 ::
+		--@doc "Specifies the Open Banking account access data types. This is a list of the data clusters being consented by the PSU, and requested for authorisation with the ASPSP.",
+		permissions: seq1 of OBExternalPermissions1Code
+		expirationDateTime: [ISODateTime]
+		transactionFromDateTime: [ISODateTime]
+		transactionToDateTime: [ISODateTime]
+	inv mk_OBReadData1(-, eDT, fDT, tDT) ==
+		lesseqDT(fDT, tDT)
+		and
+		lesseqDT(tDT, eDT)
+		and
+		--@doc kee this one in case tDT is nil
+		lesseqDT(fDT, eDT);
+	
+  --@doc Specifies the Open Banking account access data types. This is a list of the data clusters being consented by the PSU, and requested for authorisation with the ASPSP.
+  --@qst shouldn't these permissions be defined closer to their use? i.e. Various Basic/Detail only make sense close to their APIs? Or is this because of what you could do overall? Okay. 
+  --@bug these ought to be a structured type with expected endpoints and their actual permissions
+	OBExternalPermissions1Code =
+    <ReadAccountsBasic> | <ReadAccountsDetail> | <ReadBalances> | 
+    <ReadBeneficiariesBasic> | <ReadBeneficiariesDetail> | <ReadDirectDebits> | 
+    <ReadOffers> | <ReadPAN> | <ReadParty> | <ReadPartyPSU> | <ReadProducts> | 
+    <ReadScheduledPaymentsBasic> | <ReadScheduledPaymentsDetail> | 
+    <ReadStandingOrdersBasic> | <ReadStandingOrdersDetail> | 
+    <ReadStatementsBasic> | <ReadStatementsDetail> | <ReadTransactionsBasic> | 
+    <ReadTransactionsCredits> | <ReadTransactionsDebits> | <ReadTransactionsDetail>;
+    
+  --@doc to enable stronger/clear-per-endpoint invariant, add an enum on the top-level endpoints themselves  
+  OBEndPoint_NCL = 
+  	<AccountAccessConsent> | <Accounts> | <Balances> | <Transactions> | <Beneficiaries> | <DirectDebits> | 
+  	<StandingOrders> | <Products> | <Offers> | <Parties> | <ScheduledPayments> | <Statements>;
+  
+  --@doc a permision is now a smaller subset, irrespective of which end point it is used; 
+  OBPermission_NCL = 
+  	<Basic> | <Detail> | <PAN> | <Credits> | <Debits> | <Party> | <PartyPSU>;
+
+  --@doc permissions are now a set of permission per end point, where some cannot be used for some end points; some cannot be together within permissions set
+  --@doc given this is the module that grants consent access, here the definitions of what is valid for each endpoint must be defined (i.e. subsets per endpoint) 
+  OBExternalPermission1Code_NCL ::
+  	endpoint   :  OBEndPoint_NCL
+  	--@doc permissions do not participate in record equality (i.e. mk_OBExternalPermission1Code_NCL(<Accounts>, {<Basic>}) = mk_OBExternalPermission1Code_NCL(<Accounts>, {<Detail>}) 
+  	--		 this way, only endpoint define the equality between records of this type. This means, only the "last" set of permissions assigned get to be used. This is to avoid the con
+  	--		 conflict that the inequality between the two examples above would create: which one of the permissions is valid for the <Account> endpoint? 
+  	permissions:- set1 of OBPermission_NCL
+  inv mk_OBExternalPermission1Code_NCL(endpoint, perms) ==
+  	--@doc now we can say that detail and basic can't be both permitted at the same time, for every endpoint
+  	--	   or perhaps we could allow them to be together where basic gets elided by detail. stick to strictess possible for now 
+  	xor(<Detail> in set perms, <Basic> in set perms)
+  	and
+  	--@doc only three endpoints seem to give permission for <PAN>
+  	(<PAN> in set perms => endpoint in set { <Transactions>, <Balances>, <StandingOrders> })
+  	and
+  	--@doc only transaction can talk about credits and debits
+  	(<Credits> in set perms or <Debits> in set perms => endpoint = <Transactions>)  
+  	and
+  	--@doc only parties can talk about party and party psu
+  	(<Party> in set perms or <PartyPSU> in set perms => endpoint = <Parties>)
+  	;	
+
+	--@doc permissions are them the set of options per endpoint, where an endpoint cannot have more than one set of permissions (i.e. the "-" in permissions above for equality).
+	--	   if multiple permissions are allowed per endpoint, like they are in EMV endpoints, then this ought to be a sequence for the priority order of such permissions 
+  OBExternalPermissions1Code_NCL = set1 of OBExternalPermission1Code_NCL;	
+	
+	--@doc The Risk section is sent by the initiating party to the ASPSP. It is used to specify additional details for risk scoring for Account Info.
+	OBRisk2 :: ;
+	
+	OBReadConsentResponse1 ::
+		data : OBReadConsentResponse1Data
+		risk : OBRisk2
+		--@qst Swagger also deifnes Links + Meta, which is not defined in the PDF 
+		links: Links
+		meta : MetaData
+	inv mk_OBReadConsentResponse1(
+				mk_OBReadConsentResponse1Data(-, cDT, -, sDT, mk_OBReadData1(-, eDT, fDT, tDT)),
+				-, -, mk_MetaData(-, faDT, laDT)
+			)	==
+		--@doc meta data first available time within creation date time
+		lesseqDT(faDT, cDT) and lesseqDT(cDT, laDT) 
+		and
+		lesseqDT(faDT, sDT) and lesseqDT(sDT, laDT)
+		and
+		--@doc check the other times; given they can be nil, add check for such open ended cases 
+		lesseqDT(faDT, eDT) and lesseqDT(faDT, fDT) and lesseqDT(faDT, tDT)
+		and
+		lesseqDT(eDT, laDT) and lesseqDT(fDT, laDT) and lesseqDT(tDT, laDT);
+	
+	ConsentId = Min1Max128Text;
+		
+	--@doc Swagger defines this in-lined 
+	OBReadConsentResponse1Data :: 
+		consentId: Min1Max128Text
+		creationDateTime: ISODateTime
+		status: OBExternalRequestStatus1Code 
+		statusUpdateDateTime: ISODateTime
+		--@doc repetition from the OBReadDataConsent; reused defined type.
+		data: OBReadData1
+		--@doc Swagger has data as all of the above, then adds risk, as we did
+		--		 in OBReadConsentResponse1.
+	inv mk_OBReadConsentResponse1Data(-, cDT, -, sDT, mk_OBReadData1(-, eDT, fDT, tDT)) ==
+		lesseqDT(cDT, sDT)
+		and
+		--@doc creation date is within transactionFrom/To and expiration date time 
+		lesseqDT(cDT, eDT)
+		and
+		lesseqDT(cDT, tDT)
+		and
+		lesseqDT(fDT, cDT);
+				
+functions
+	first_accountAccessConsentStatus: () -> OBExternalRequestStatus1Code
+	first_accountAccessConsentStatus() == <AwaitingAuthorisation>;
+	
+	last_accountAccessConsentStatus: () -> set1 of OBExternalRequestStatus1Code
+	last_accountAccessConsentStatus() == {<Rejected>, <Revoked>};
+	
+  --@doc implements the FSM of 
+  --@traceto AAC.account-access-consent GET endpoint
+  fsm_accountAccessConsentStatus: OBExternalRequestStatus1Code -> set of OBExternalRequestStatus1Code
+  fsm_accountAccessConsentStatus(current) ==
+    cases current:
+      <AwaitingAuthorisation>  -> {<Authorised>, <Rejected>},
+      <Authorised>   					 -> {<Revoked>},  
+      others 							     -> {}
+    end
+  post
+    RESULT <> {} <=> current in set {<AwaitingAuthorisation>,<Authorised>};
+
+  valid_accountAccessConsentStatus: OBExternalRequestStatus1Code * OBExternalRequestStatus1Code -> bool
+  valid_accountAccessConsentStatus(current, next) == 
+    next in set fsm_accountAccessConsentStatus(current);
+ 
+ 	next_accountAccessConsentStatus: OBExternalRequestStatus1Code -> OBExternalRequestStatus1Code
+ 	next_accountAccessConsentStatus(current) ==
+ 		let result in set fsm_accountAccessConsentStatus(current) in result
+ 	post
+ 		valid_accountAccessConsentStatus(current, RESULT);	 
+	
+	authorise_accountAccessConsent: OBExternalRequestStatus1Code -> OBExternalRequestStatus1Code
+	authorise_accountAccessConsent(s) == <Authorised>
+	pre
+		valid_accountAccessConsentStatus(s, <Authorised>);
+		
+	revoke_accountAccessConsent: OBExternalRequestStatus1Code -> OBExternalRequestStatus1Code
+	revoke_accountAccessConsent(s) == <Revoked>
+	pre
+		valid_accountAccessConsentStatus(s, <Revoked>);
+
+	reject_accountAccessConsent: OBExternalRequestStatus1Code -> OBExternalRequestStatus1Code
+	reject_accountAccessConsent(s) == <Rejected>
+	pre
+		valid_accountAccessConsentStatus(s, <Rejected>);
+		
+	--@doc if this is used instead of OBExternalPermissions1Code_NCL, this invariant is to be used in various places, 
+	--	   and intrinsic filters between endpoints and their actual permissions are confused. will leave here for reference
+	--@todo delete
+	invariant_permission_per_endpoint: set of OBExternalPermissions1Code * set1 of OBExternalPermissions1Code -> bool
+	invariant_permission_per_endpoint(perms, bounds) == 
+		perms <> {} and	perms subset bounds 
+		and
+		xor(<ReadTransactionsDetail> in set perms, <ReadTransactionsBasic> in set perms);
+	
+	permissions_for: OBEndPoint_NCL * OBExternalPermissions1Code_NCL -> set1 of OBPermission_NCL
+	permissions_for(endpoint, perms) == 
+		dunion { i.permissions | i in set perms & i.endpoint = endpoint }
+	post
+		(forall p in set RESULT & exists i in set perms & i.endpoint = endpoint and p in set i.permissions);
+		
+state AccountAccessConsent of
+	last: [RequestType]
+	status: OBExternalRequestStatus1Code
+	consent: [OBReadConsent1]
+	response: [OBReadConsentResponse1]
+inv mk_AccountAccessConsent(last, status, consent, response) == 
+	cases last:
+		<POST>	 -> consent <> nil and response <> nil,
+		<GET>		 -> response <> nil,
+		<DELETE> -> true,
+		others   -> consent = nil and response = nil
+	end
+	--@todo change status according to whether last value is
+	and
+	--@doc response permissions must be within consent request permissions, not beyond
+	(consent <> nil and response <> nil 
+	 => 
+	 elems response.data.data.permissions subset elems consent.data.permissions
+	)
+	and
+	--@doc if a response exist, its status must match the state's status
+	(response <> nil => response.data.status = status)
+init aac == aac = mk_AccountAccessConsent(nil, first_accountAccessConsentStatus(), nil, nil)
+end	
+
+operations
+
+	account_access_consent_POST(input: OBReadConsent1) output: OBReadConsentResponse1
+		==
+		(atomic(
+			 last := <POST>;
+			 status := let s in set fsm_accountAccessConsentStatus(status) in s;
+			 consent := input;		
+			 response := EXAMPLE_RESPONSE;
+			 response.data.status := status;
+		 );
+		 return response;
+		)
+	ext
+		wr last, status, consent, response
+	post
+		consent = input and output = response
+		and
+		--@doc status of the response must be within FSM-valid statuses from status at call 
+		output.data.status in set fsm_accountAccessConsentStatus(status~);
+	
+	account_access_consent_GET () output: OBReadConsentResponse1
+		==
+		(last := <GET>;
+		 return response;
+		)
+	ext
+		wr last rd response
+	pre
+		--@todo, how to get this? 
+		--Prior to calling the API, the AISP must have an access token issued by the ASPSP using a client credentials grant
+		response <> nil
+	post
+		output = response;
+	
+	account_access_consent_DELETE() output: OBReadConsentResponse1
+		==
+		(last := <DELETE>;
+		 let r: OBReadConsentResponse1 = response in 
+		 		(response := nil;
+		 			--@todo change the status to <Revoke>? 
+		 		 return r;
+		  	)
+		)
+	ext
+		wr last, response
+	pre
+		response <> nil and last in set {<GET>,<POST>}
+	post
+		output = response~
+		and 
+		response = nil;
+		
+values
+	EXAMLPE_CONSENT : OBReadConsent1 = 
+		mk_OBReadConsent1(mk_OBReadData1([<ReadAccountsBasic>], nil, nil, nil), mk_OBRisk2());
+				
+	EXAMPLE_RESPONSE: OBReadConsentResponse1 =
+		let 
+			creationDT       : ISODateTime = mkDTG(2019, 10, 20, 12, 00, 00),
+			statusUpdateDT	 : ISODateTime = creationDT,
+			expirationDT     : ISODateTime = mkDTG(2019, 10, 21, 12, 00, 00),--addDTG(creationDT, ONE_DAY), 
+			transactionFromDT: ISODateTime = creationDT,
+			transactionToDT  : ISODateTime = mkDTG(2019, 10, 20, 13, 00, 00),--addDTG(transactionFromDT, ONE_HOUR),
+			firstAvailableDT : ISODateTime = creationDT, 
+			lastAvailableDT  : ISODateTime = mkDTG(2019, 10, 21, 13, 00, 00)--addDTG(addDTG(firstAvailableDT, ONE_DAY), ONE_HOUR)
+		in 	
+			mk_OBReadConsentResponse1(
+				mk_OBReadConsentResponse1Data(
+					"something-for-consent-id", 
+					creationDT,
+					<AwaitingAuthorisation>,
+					statusUpdateDT,
+					mk_OBReadData1(
+						[<ReadAccountsBasic>], 
+						expirationDT, 
+						transactionFromDT, 
+						transactionToDT
+					)
+				), 
+				mk_OBRisk2(), 
+				mk_Links("some-self-link", nil, nil, nil, nil), 
+				mk_MetaData(1, firstAvailableDT, lastAvailableDT)
+			);
+
+functions
+	f: () -> [OBReadConsentResponse1Data]
+	f() == 
+			--	let 
+			--creationDT       : ISODateTime = mkDTG(2019, 10, 20, 12, 00, 00),
+			--expirationDT     : ISODateTime = mkDTG(2019, 10, 21, 12, 00, 00),--addDTG(creationDT, ONE_DAY), 
+			--transactionFromDT: ISODateTime = creationDT,
+			--transactionToDT  : ISODateTime = mkDTG(2019, 10, 20, 13, 00, 00)--addDTG(transactionFromDT, ONE_HOUR),
+			--firstAvailableDT : ISODateTime = creationDT, 
+			--lastAvailableDT  : ISODateTime = mkDTG(2019, 10, 21, 13, 00, 00)--addDTG(addDTG(firstAvailableDT, ONE_DAY), ONE_HOUR)
+		--in 	
+		nil;
+	
+end AISP_AccountAccessConsent

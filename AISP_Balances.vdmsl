@@ -1,0 +1,75 @@
+/*
+https://openbanking.atlassian.net/wiki/spaces/DZ/pages/1077805375/Balances+v3.1.2
+v.0.1 Leo Freitas, 2019
+*/
+module AISP_Balances
+imports
+from ISO8601
+	types
+		DTG renamed ISODateTime;
+,
+from AISP_GlobalDataModel
+	types
+		AccountId renamed AccountId;
+		CreditDebitIndicator renamed CreditDebitIndicator;
+		Links renamed Links;
+		MetaData renamed MetaData;
+		OBExternalLimitType1Code renamed OBExternalLimitType1Code;
+		OBBalanceType1Code renamed OBBalanceType1Code;
+		OBActiveOrHistoricCurrencyAndAmount renamed OBActiveOrHistoricCurrencyAndAmount;
+	functions
+		filter_info renamed filter_info;
+exports 
+	types
+		struct OBReadBalance1;
+		struct OBCashBalance1;
+	operations
+		balances_GET: [AccountId] ==> seq1 of OBCashBalance1;	
+definitions 
+
+types
+	OBReadBalance1 ::
+		--@qst spec talks about a "set of elements"? 
+	  balances: seq1 of OBCashBalance1
+	  links   : Links
+	  meta    : MetaData;
+	
+	OBCashBalance1 ::   
+		accountId: AccountId
+		creditDebitIndicator: CreditDebitIndicator
+		type: OBBalanceType1Code
+		datetime: ISODateTime
+		amount: OBActiveOrHistoricCurrencyAndAmount
+		creditLine: seq of OBCreditLine1;
+		
+	OBCreditLine1 ::
+		included: bool
+		type: [OBExternalLimitType1Code]
+		amount: [OBActiveOrHistoricCurrencyAndAmount];
+	
+state Balances of
+	balances: [OBReadBalance1]
+init b == b = mk_Balances(nil)
+end
+
+functions
+	filter_acctid: AccountId * OBCashBalance1 -> bool
+	filter_acctid(a,e) == e.accountId = a;
+
+operations
+
+	pure
+	balances_GET: [AccountId] ==> seq1 of OBCashBalance1
+	balances_GET(acctid) == 
+		(return filter_info[OBCashBalance1](acctid, balances.balances, filter_acctid);
+		)
+	pre
+		balances <> nil
+		and
+		(acctid <> nil =>	filter_info[OBCashBalance1](acctid, balances.balances, filter_acctid) <> [])
+	post
+		len RESULT <= len balances.balances 
+		and
+		(acctid <> nil => len RESULT = 1);
+			
+end AISP_Balances

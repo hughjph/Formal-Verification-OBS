@@ -1,0 +1,233 @@
+/*
+https://openbanking.atlassian.net/wiki/spaces/DZ/pages/1077805388/Transactions+v3.1.2
+v.0.1 Leo Freitas, 2019
+*/
+module AISP_Transactions
+imports
+from ISO8601
+	types
+		DTG renamed ISODateTime;
+,
+from AISP_GlobalDataModel
+	types 
+		Links renamed Links;
+		MetaData renamed MetaData;
+		CreditDebitIndicator renamed CreditDebitIndicator;
+		AccountId renamed AccountId;
+		CountryCode renamed CountryCode;
+		CurrencyCode renamed CurrencyCode;
+		Min3Max4Text renamed Min3Max4Text;
+		Min1Max4Text renamed Min1Max4Text;
+		Min1Max16Text renamed Min1Max16Text;
+		Min1Max34Text renamed Min1Max34Text;
+		Min1Max35Text renamed Min1Max35Text;
+		Min1Max40Text renamed Min1Max40Text;
+		Min1Max70Text renamed Min1Max70Text;
+		Min1Max140Text renamed Min1Max140Text;
+		Min1Max210Text renamed Min1Max210Text;
+		Min1Max256Text renamed Min1Max256Text;
+		Min1Max350Text renamed Min1Max350Text;
+		Min1Max500Text renamed Min1Max500Text;
+		OBBalanceType1Code renamed OBBalanceType1Code;
+		OBEntryStatus1Code renamed OBEntryStatus1Code;
+		OBAddressTypeCode renamed OBAddressTypeCode;
+		OBActiveOrHistoricCurrencyAndAmount renamed OBActiveOrHistoricCurrencyAndAmount;
+		OBExternalCardAuthorisationType1Code renamed OBExternalCardAuthorisationType1Code;
+		OBExternalCardSchemeType1Code renamed OBExternalCardSchemeType1Code;
+	functions
+		xor renamed xor;
+		filter_info renamed filter_info;
+,
+from AISP_AccountAccessConsent
+	types
+		OBExternalPermissions1Code renamed OBExternalPermissions1Code
+exports 
+	types	
+		struct OBReadTransaction5;
+		struct OBTransaction5;
+		struct OBBranchAndFinancialInstitutionIdentification6;
+		struct Transactions_GET_Permissions;
+		struct Transactions_GET_Response;
+	operations
+		transactions_GET: [AccountId] * Transactions_GET_Permissions ==> Transactions_GET_Response;
+definitions 
+
+types
+	OBReadTransaction5 ::
+		transactions: seq of OBTransaction5
+		links: Links
+		meta: MetaData;
+	
+	OBTransaction5 :: 
+		basic: OBTransaction5Basic
+		chargeAmount: [OBActiveOrHistoricCurrencyAndAmount]
+		currencyExchange: [OBCurrencyExchange5]
+		bankTransactionCode: [OBBankTransactionCodeStructure1]
+		proprietaryBankTransactionCode: [ProprietaryBankTransactionCode]
+		--@qst present in Swagger and missing from data model? 
+		cardInstrument: [OBTransactionCardInstrument1]
+		--@qst present in Swagger and missing from data model? 
+		supplementaryData: [OBSupplementaryData1]
+		--@qst present in Swagger and missing from data model? 
+		transactionInformation: [Min1Max500Text]
+		--@qst present in Swagger but in different order in data model? these are earlier
+		balance: [OBTransactionCashBalance]
+		merchantDetails: [OBMerchantDetails1]
+		creditorAgent: [OBBranchAndFinancialInstitutionIdentification6]
+		creditorAccount: [OBCashAccount6]
+		debtorAgent: [OBBranchAndFinancialInstitutionIdentification6]
+		debtorAccount: [OBCashAccount6];
+	
+	OBTransaction5Basic :: 
+		accountId: AccountId
+		transactionId: [TransactionId]
+		transactionReference: [Min1Max35Text]
+		statementReference: seq of Min1Max35Text
+		creditDebitIndicator: CreditDebitIndicator
+		status: OBEntryStatus1Code
+		--@qst what is the relationship between these two dates?
+		bookingDateTime: ISODateTime
+		valueDateTime: [ISODateTime]
+		--@qst field in swagger but after supplementary data? Here in data model
+		--@doc leaving it there to enable the separatsion between Basic and not Basic
+		--transactionInformation: [Min1Max500Text]
+		addressLine: [Min1Max70Text]
+		amount: OBActiveOrHistoricCurrencyAndAmount;
+			
+	TransactionId = Min1Max210Text;
+	
+	OBCurrencyExchange5 ::
+		sourceCurrency: CurrencyCode
+		targetCurrency: [CurrencyCode]
+		unitCurrency: [CurrencyCode]
+		exchangeRate: real
+		contractIdentification: [Min1Max35Text]
+		quotationDate: [ISODateTime]
+		instructedAmount: [OBActiveOrHistoricCurrencyAndAmount];
+	
+	OBBankTransactionCodeStructure1 :: 
+		code: Min1Max4Text
+		subcode: Min1Max4Text;
+	
+	ProprietaryBankTransactionCode ::
+		code: Min1Max35Text
+		issuer: [Min1Max35Text];	
+
+	--@qst why not simply allow for empty string instead of min1? okay, no "" all over
+	OBTransactionCardInstrument1 :: 
+		cardSchemeName: OBExternalCardSchemeType1Code
+		authorisationType: [OBExternalCardAuthorisationType1Code]
+		name: [Min1Max70Text]
+		identification: [Min1Max34Text];
+	
+	--@doc underspecified deliberately, like OBRisk2
+	OBSupplementaryData1 :: ;
+		
+	OBTransactionCashBalance ::	
+		creditDebitIndicator: CreditDebitIndicator
+		type: OBBalanceType1Code
+		amount: OBActiveOrHistoricCurrencyAndAmount;
+	
+	--@qst why allow a completely empty type that is already nilable at the point of use? 
+	OBMerchantDetails1 ::
+		merchantName: [Min1Max350Text]
+		merchantCategoryCode: [Min3Max4Text];
+		
+	--@qst why allow a completely empty type that is already nilable at the point of use? 
+	OBBranchAndFinancialInstitutionIdentification6 :: 
+		schemeName: [OBExternalFinancialInstitutionIdentification4Code]
+		identification: [Min1Max35Text]
+		name: [Min1Max140Text]
+		postalAddress: [OBPostalAddress6];
+
+	--@qst why explicilty redefine aleready available type just for identical reuse? 
+	OBExternalFinancialInstitutionIdentification4Code = Min1Max40Text;
+	
+	--@qst why allow a completely empty type that is already nilable at the point of use? 
+	--@todo see Beneficiaries spec
+	--Due to internationalisation requirements:
+	-- The CreditorAgent object may be used to represent either (1) the BIC (with UK.OBIE.BICFI in the SchemeName field and the BIC in the Identification field), or (2) the Name and Address details for the financial institution.
+	-- The CreditorAccount/Identification field may be used to represent a non-UK specific branch and account numbering scheme with "UK.OBIE.SortCodeAccountNumber" being populated in the CreditorAccount/SchemeName.
+	OBPostalAddress6 ::
+		addressType: [OBAddressTypeCode]
+		department: [Min1Max70Text]
+		subDepartment: [Min1Max70Text]
+		streetName: [Min1Max70Text]
+		buildingNumber: [Min1Max16Text]
+		postcode: [Min1Max16Text]
+		townName: [Min1Max35Text]
+		countrySubDivision: [Min1Max35Text]
+		country: [CountryCode]
+		addressLine: seq of Min1Max70Text
+	inv mk_OBPostalAddress6(-,-,-,-,-,-,-,-,-,s) == len s <= 7;
+	
+	--@qst why allow a completely empty type that is already nilable at the point of use? 
+	OBCashAccount6 :: 
+		schemeName: [OBExternalAccountIdentification4Code]
+		identification: [Min1Max256Text]
+		name: [Min1Max70Text]
+		--@qst does a single character really matter? Everywhere else max=35 for such type? 
+		secondaryIdentification: [Min1Max34Text];
+		
+	--@qst why explicilty redefine aleready available type just for identical reuse? 
+	OBExternalAccountIdentification4Code = Min1Max40Text;
+
+	--@qst should the equivalent for AISP accounts be a set too? 
+	Transactions_GET_Permissions = set1 of OBExternalPermissions1Code 
+	inv perm == 
+		perm subset { <ReadPAN>, <ReadTransactionsDetail>, <ReadTransactionsBasic> }
+		and
+		xor(<ReadTransactionsDetail> in set perm, <ReadTransactionsBasic> in set perm);
+
+	Transactions_GET_Response = (seq1 of OBTransaction5Basic | seq1 of OBTransaction5);
+
+state Transactions of
+	transactions: [OBReadTransaction5]
+init b == b = mk_Transactions(nil)
+end
+
+functions
+		
+	filter_acctid: AccountId * OBTransaction5 -> bool
+	filter_acctid(a,e) == e.basic.accountId = a;
+
+	--@doc project the basic information from OBTransaction5
+	basicTransactionsFrom: seq of OBTransaction5 -> seq of OBTransaction5Basic
+	basicTransactionsFrom(trns) ==
+		[ trns(i).basic | i in set inds trns ]
+	post
+		len trns = len RESULT;
+
+operations
+
+	pure
+	--@qst permissions are crucial here, not defined properly in relation to the API description?
+	--@qst who sets these permissions? They do not come in the API call. 
+	--@qst should they be part of the state? Or are they on a per-api basis?
+	transactions_GET: [AccountId] * Transactions_GET_Permissions ==> Transactions_GET_Response
+	transactions_GET(acctid, perm) == 
+		(let 
+			 filtered_trans: seq of OBTransaction5 = 
+				  filter_info[OBTransaction5](acctid, transactions.transactions, filter_acctid)
+		 in
+			 if <ReadTransactionsDetail> in set perm then
+				 return filtered_trans
+			 else
+			 	 return basicTransactionsFrom(filtered_trans)
+		)
+	pre
+		transactions <> nil
+		and
+		(acctid <> nil =>	filter_info[OBTransaction5](acctid, transactions.transactions, filter_acctid) <> [])
+	post
+		len RESULT <= len transactions.transactions 
+		and
+		--@qst various "may" might mean, result can be empty?
+		(acctid <> nil => len RESULT <= 1)
+		and
+		--@qst should this (and the declared type) be seq1 or seq? as-is, I am checking for seq1 only 
+		(<ReadTransactionsDetail> in set perm => is_(RESULT, seq of OBTransaction5))
+		and
+		(<ReadTransactionsBasic> in set perm => is_(RESULT, seq of OBTransaction5Basic));
+				 	
+end AISP_Transactions
